@@ -9,3 +9,8 @@
 *.xcodeproj
 .swiftpm/
 Package.resolved
+
+# Python (mcp-server)
+mcp-server/.venv/
+__pycache__/
+*.pyc
