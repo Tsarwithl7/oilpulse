@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>OilMonitor</string>
+    <string>OilPulse</string>
     <key>CFBundleIdentifier</key>
-    <string>com.user.OilMonitor</string>
+    <string>com.user.OilPulse</string>
     <key>CFBundleName</key>
-    <string>Oil Monitor</string>
+    <string>OilPulse</string>
     <key>CFBundleDisplayName</key>
-    <string>Oil Monitor</string>
+    <string>OilPulse</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>

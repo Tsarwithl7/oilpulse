@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🛢️ Oil Monitor
+# 🛢️ OilPulse
 
 **A lightweight, real-time crude oil price monitor for macOS.**
 
@@ -17,13 +17,13 @@
 
 ## 📖 Overview
 
-**Oil Monitor** is a lightweight tool that keeps an eye on crude oil prices in real time and surfaces them through a small, native macOS app. It runs locally and quietly — no browser, no heavy background services — so the latest **Brent** and **WTI** prices and recent trends are always one click away.
+**OilPulse** is a lightweight tool that keeps an eye on crude oil prices in real time and surfaces them through a small, native macOS app. It runs locally and quietly — no browser, no heavy background services — so the latest **Brent** and **WTI** prices and recent trends are always one click away.
 
 ## 🎯 Why it matters
 
 The goal is simple: **help you notice oil price movements the moment they happen.**
 
-This is especially useful in the **United States**, where retail gas-station prices tend to follow crude oil with a short delay. When crude spikes, Oil Monitor lets you catch it early — so you can **fill up your tank *before* the pump prices catch up.** A few minutes of awareness can mean real savings at the gas station.
+This is especially useful in the **United States**, where retail gas-station prices tend to follow crude oil with a short delay. When crude spikes, OilPulse lets you catch it early — so you can **fill up your tank *before* the pump prices catch up.** A few minutes of awareness can mean real savings at the gas station.
 
 ## ✨ Features
 
@@ -54,7 +54,7 @@ Requirements: **macOS 14+** and the **Swift toolchain** (Xcode or Command Line T
 
 ```bash
 # Clone
-git clone https://github.com/Tsarwithl7/oil_monitor.git
+git clone https://github.com/Tsarwithl7/oilpulse.git
 cd oil_monitor
 
 # Build a release .app bundle
