@@ -80,6 +80,19 @@ struct StatusBarView: View {
 
             Divider().frame(height: 12)
 
+            // 已启用的提醒数量
+            if vm.enabledAlertCount > 0 {
+                HStack(spacing: 2) {
+                    Image(systemName: "bell.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.orange)
+                    Text("\(vm.enabledAlertCount)")
+                        .font(.system(size: 10))
+                        .foregroundStyle(.orange)
+                }
+                .help("已启用 \(vm.enabledAlertCount) 条价格提醒")
+            }
+
             // Settings
             Button {
                 showSettings = true

@@ -33,6 +33,88 @@ final class OilPriceViewModel: ObservableObject {
     private var lastNormalRefreshAt: Date?
     private let normalCooldown: TimeInterval = 10
 
+    // MARK: - Alert
+
+    private let evaluator = PriceAlertEvaluator()
+    private let notifications = NotificationService.shared
+    private var previousBrentPrice: Double?
+    private var previousWtiPrice: Double?
+
+    private var brentAlertCfg: (upperEnabled: Bool, upper: Double, lowerEnabled: Bool, lower: Double) {
+        let ud = UserDefaults.standard
+        return (ud.bool(forKey: "brentUpperAlertEnabled"),
+                ud.double(forKey: "brentUpperAlertThreshold"),
+                ud.bool(forKey: "brentLowerAlertEnabled"),
+                ud.double(forKey: "brentLowerAlertThreshold"))
+    }
+
+    private var wtiAlertCfg: (upperEnabled: Bool, upper: Double, lowerEnabled: Bool, lower: Double) {
+        let ud = UserDefaults.standard
+        return (ud.bool(forKey: "wtiUpperAlertEnabled"),
+                ud.double(forKey: "wtiUpperAlertThreshold"),
+                ud.bool(forKey: "wtiLowerAlertEnabled"),
+                ud.double(forKey: "wtiLowerAlertThreshold"))
+    }
+
+    var enabledAlertCount: Int {
+        let ud = UserDefaults.standard
+        return [
+            "brentUpperAlertEnabled", "brentLowerAlertEnabled",
+            "wtiUpperAlertEnabled",   "wtiLowerAlertEnabled"
+        ].filter { ud.bool(forKey: $0) }.count
+    }
+
+    func resetAlertBaseline(for symbol: OilSymbol) {
+        switch symbol {
+        case .brent:
+            guard let price = brentPrice?.price else { return }
+            let c = brentAlertCfg
+            evaluator.resetArm(symbol: .brent, currentPrice: price,
+                               upperThreshold: c.upper, lowerThreshold: c.lower)
+        case .wti:
+            guard let price = wtiPrice?.price else { return }
+            let c = wtiAlertCfg
+            evaluator.resetArm(symbol: .wti, currentPrice: price,
+                               upperThreshold: c.upper, lowerThreshold: c.lower)
+        }
+    }
+
+    private func evaluateAlerts(brent: OilPrice, wti: OilPrice) {
+        var firings: [AlertFiring] = []
+        let bc = brentAlertCfg
+        let wc = wtiAlertCfg
+
+        if let prev = previousBrentPrice {
+            firings += evaluator.evaluate(
+                symbol: .brent,
+                previousPrice: prev, currentPrice: brent.price,
+                upperEnabled: bc.upperEnabled, upperThreshold: bc.upper,
+                lowerEnabled: bc.lowerEnabled, lowerThreshold: bc.lower,
+                marketTime: brent.marketTime)
+        }
+        previousBrentPrice = brent.price
+
+        if let prev = previousWtiPrice {
+            firings += evaluator.evaluate(
+                symbol: .wti,
+                previousPrice: prev, currentPrice: wti.price,
+                upperEnabled: wc.upperEnabled, upperThreshold: wc.upper,
+                lowerEnabled: wc.lowerEnabled, lowerThreshold: wc.lower,
+                marketTime: wti.marketTime)
+        }
+        previousWtiPrice = wti.price
+
+        // 请求权限（首次有提醒启用时），然后发送通知
+        if !firings.isEmpty {
+            Task {
+                if notifications.authorizationStatus == .notDetermined {
+                    _ = await notifications.requestPermission()
+                }
+                for f in firings { notifications.send(f) }
+            }
+        }
+    }
+
     // MARK: - Init
 
     init() {
@@ -50,6 +132,21 @@ final class OilPriceViewModel: ObservableObject {
         let w = await database.loadLatestPrice(for: OilSymbol.wti.rawValue)
         brentPrice = b
         wtiPrice = w
+
+        // 用缓存价格建立提醒基线，不触发通知
+        if let b = b {
+            let c = brentAlertCfg
+            evaluator.setBaseline(symbol: .brent, price: b.price,
+                                  upperThreshold: c.upper, lowerThreshold: c.lower)
+            previousBrentPrice = b.price
+        }
+        if let w = w {
+            let c = wtiAlertCfg
+            evaluator.setBaseline(symbol: .wti, price: w.price,
+                                  upperThreshold: c.upper, lowerThreshold: c.lower)
+            previousWtiPrice = w.price
+        }
+
         dataStatus = (b != nil || w != nil) ? .cached : .noData
         await refreshHistoryFromCache()
     }
@@ -87,6 +184,7 @@ final class OilPriceViewModel: ObservableObject {
             async let wFetch = service.fetchCurrentPrice(for: .wti)
             let (b, w) = try await (bFetch, wFetch)
 
+            evaluateAlerts(brent: b, wti: w)
             brentPrice = b
             wtiPrice = w
             await database.saveLatestPrice(b)
@@ -99,11 +197,7 @@ final class OilPriceViewModel: ObservableObject {
             dataStatus = .normal
         } catch {
             errorMessage = error.localizedDescription
-            if brentPrice != nil || wtiPrice != nil {
-                dataStatus = .cached
-            } else {
-                dataStatus = .offline
-            }
+            dataStatus = (brentPrice != nil || wtiPrice != nil) ? .cached : .offline
         }
 
         isRefreshing = false
@@ -115,7 +209,6 @@ final class OilPriceViewModel: ObservableObject {
         if let t = forceRefreshTask, !t.isCancelled { return }
         normalRefreshTask?.cancel()
         normalRefreshTask = nil
-
         forceRefreshTask = Task { await performForceRefresh() }
     }
 
@@ -129,6 +222,7 @@ final class OilPriceViewModel: ObservableObject {
             async let wFetch = service.fetchCurrentPrice(for: .wti)
             let (b, w) = try await (bFetch, wFetch)
 
+            evaluateAlerts(brent: b, wti: w)
             brentPrice = b
             wtiPrice = w
             await database.saveLatestPrice(b)
@@ -141,11 +235,7 @@ final class OilPriceViewModel: ObservableObject {
             dataStatus = .normal
         } catch {
             errorMessage = error.localizedDescription
-            if brentPrice != nil || wtiPrice != nil {
-                dataStatus = .cached
-            } else {
-                dataStatus = .offline
-            }
+            dataStatus = (brentPrice != nil || wtiPrice != nil) ? .cached : .offline
         }
 
         isRefreshing = false
@@ -190,9 +280,7 @@ final class OilPriceViewModel: ObservableObject {
         }
     }
 
-    func updateTimerInterval() {
-        scheduleTimer()
-    }
+    func updateTimerInterval() { scheduleTimer() }
 
     // MARK: - Computed
 
@@ -205,7 +293,6 @@ final class OilPriceViewModel: ObservableObject {
         return String(format: "B %.2f · W %.2f", b.price, w.price)
     }
 
-    /// 上次成功刷新的真实时间（点击更新后会立即变化，作为操作反馈）。
     var lastUpdatedText: String {
         guard let t = lastRefreshedAt else { return "尚未刷新" }
         let diff = Date().timeIntervalSince(t)
@@ -216,7 +303,6 @@ final class OilPriceViewModel: ObservableObject {
         return fmt.string(from: t)
     }
 
-    /// 行情数据本身的时间（休市时会停在最后一笔成交时间）。
     var marketTimeText: String? {
         let ref = brentPrice?.marketTime ?? wtiPrice?.marketTime
         guard let t = ref else { return nil }
