@@ -25,6 +25,10 @@ cp "Resources/Info.plist" "${BUNDLE}/Contents/Info.plist"
 # Make the binary executable
 chmod +x "${BUNDLE}/Contents/MacOS/${APP_NAME}"
 
+# Ad-hoc sign so macOS allows notification permissions
+echo "▶ Signing ${BUNDLE} (ad-hoc)…"
+codesign --force --deep --sign - "${BUNDLE}"
+
 echo "✓ Done → ${BUNDLE}"
 echo ""
 echo "Run with:  open ${BUNDLE}"
