@@ -3,6 +3,7 @@ import ServiceManagement
 
 struct SettingsView: View {
     @EnvironmentObject var vm: OilPriceViewModel
+    @Environment(\.dismiss) private var dismiss
     @State private var launchAtLogin = false
 
     var body: some View {
@@ -41,14 +42,19 @@ struct SettingsView: View {
             }
 
             Section {
-                Button("退出 Oil Monitor") {
+                Button("退出 OilPulse") {
                     NSApplication.shared.terminate(nil)
                 }
                 .foregroundStyle(.red)
             }
         }
         .formStyle(.grouped)
-        .frame(width: 360, height: 380)
+        .frame(width: 360, height: 400)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button("完成") { dismiss() }
+            }
+        }
         .onAppear { launchAtLogin = getLaunchAtLoginStatus() }
     }
 
