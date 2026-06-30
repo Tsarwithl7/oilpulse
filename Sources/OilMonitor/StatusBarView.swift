@@ -3,6 +3,7 @@ import SwiftUI
 struct StatusBarView: View {
     @ObservedObject var vm: OilPriceViewModel
     @Binding var showSettings: Bool
+    @Binding var showStrategy: Bool
 
     private var dot: Color {
         switch vm.dataStatus {
@@ -92,6 +93,17 @@ struct StatusBarView: View {
                 }
                 .help("已启用 \(vm.enabledAlertCount) 条价格提醒")
             }
+
+            // Strategy
+            Button {
+                showStrategy = true
+            } label: {
+                Image(systemName: vm.strategyPlan == nil ? "wand.and.stars" : "wand.and.stars.inverse")
+                    .font(.system(size: 12))
+                    .foregroundStyle(vm.strategyPlan != nil ? .purple : .secondary)
+            }
+            .buttonStyle(.borderless)
+            .help("AI 加油策略")
 
             // Settings
             Button {

@@ -3,6 +3,7 @@ import SwiftUI
 struct MenuBarContentView: View {
     @EnvironmentObject var vm: OilPriceViewModel
     @State private var showSettings = false
+    @State private var showStrategy = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -120,12 +121,16 @@ struct MenuBarContentView: View {
             Divider()
 
             // ── Status bar ───────────────────────────────────────────────
-            StatusBarView(vm: vm, showSettings: $showSettings)
+            StatusBarView(vm: vm, showSettings: $showSettings, showStrategy: $showStrategy)
         }
         .frame(width: 480)
         .background(Color(NSColor.windowBackgroundColor))
         .sheet(isPresented: $showSettings) {
             SettingsView()
+                .environmentObject(vm)
+        }
+        .sheet(isPresented: $showStrategy) {
+            StrategyView()
                 .environmentObject(vm)
         }
     }

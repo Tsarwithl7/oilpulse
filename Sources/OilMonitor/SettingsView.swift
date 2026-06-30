@@ -9,6 +9,18 @@ struct SettingsView: View {
 
     @State private var launchAtLogin = false
 
+    // 车辆参数
+    @AppStorage("vehicleTankGallons") private var tankGallons: Double = 15
+    @AppStorage("vehicleWeeklyMiles") private var weeklyMiles: Double = 300
+    @AppStorage("vehicleMPG")         private var mpg:         Double = 30
+
+    // LLM 设置
+    @AppStorage("llmBaseURL")    private var llmBaseURL   = ""
+    @AppStorage("llmModelName")  private var llmModelName = ""
+    @State private var apiKeyField = ""
+    @State private var llmTestResult: String?
+    @State private var llmTesting = false
+
     // Brent 提醒
     @AppStorage("brentUpperAlertEnabled")   private var brentUpperEnabled   = false
     @AppStorage("brentUpperAlertThreshold") private var brentUpperThreshold = 0.0
@@ -114,6 +126,78 @@ struct SettingsView: View {
                 }
             }
 
+            // ── 车辆参数 ──────────────────────────────────────────────
+            Section("我的车辆") {
+                LabeledContent("油箱容量") {
+                    HStack {
+                        TextField("15", value: $tankGallons, format: .number)
+                            .textFieldStyle(.roundedBorder).frame(width: 70)
+                        Text("加仑").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                LabeledContent("每周行驶") {
+                    HStack {
+                        TextField("300", value: $weeklyMiles, format: .number)
+                            .textFieldStyle(.roundedBorder).frame(width: 70)
+                        Text("英里").font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                LabeledContent("平均油耗 (MPG)") {
+                    TextField("30", value: $mpg, format: .number)
+                        .textFieldStyle(.roundedBorder).frame(width: 70)
+                }
+                if mpg > 0 {
+                    LabeledContent("估算周耗油", value: String(format: "%.1f 加仑", weeklyMiles / mpg))
+                }
+            }
+
+            // ── AI 策略 LLM ───────────────────────────────────────────
+            Section("AI 策略推理服务器") {
+                LabeledContent("Base URL") {
+                    TextField("http://192.168.1.x:11434/v1", text: $llmBaseURL)
+                        .textFieldStyle(.roundedBorder)
+                }
+                LabeledContent("模型名称") {
+                    TextField("qwen2.5:14b", text: $llmModelName)
+                        .textFieldStyle(.roundedBorder)
+                }
+                LabeledContent("API Key") {
+                    SecureField("本地服务可留空", text: $apiKeyField)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: apiKeyField) { _, v in
+                            KeychainHelper.setAPIKey(v.isEmpty ? nil : v)
+                        }
+                }
+
+                HStack {
+                    Button("测试连接") {
+                        llmTestResult = nil
+                        llmTesting = true
+                        Task {
+                            let r = await LLMService.shared.testConnection()
+                            switch r {
+                            case .success(let msg): llmTestResult = "✓ " + msg
+                            case .failure(let e):   llmTestResult = "✗ " + (e.errorDescription ?? "失败")
+                            }
+                            llmTesting = false
+                        }
+                    }
+                    .disabled(llmBaseURL.isEmpty || llmModelName.isEmpty || llmTesting)
+                    if llmTesting { ProgressView().scaleEffect(0.7) }
+                    Spacer()
+                }
+
+                if let result = llmTestResult {
+                    Text(result)
+                        .font(.caption)
+                        .foregroundStyle(result.hasPrefix("✓") ? .green : .red)
+                }
+
+                Text("若服务器地址为 http://，请确认 Info.plist 已允许任意网络访问。重新 build 后生效。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+
             // ── 关于 ──────────────────────────────────────────────────
             Section("关于") {
                 LabeledContent("版本", value: "1.0.0 (MVP)")
@@ -136,7 +220,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 380, height: 640)
+        .frame(width: 400, height: 800)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("完成") { dismiss() }
@@ -144,13 +228,13 @@ struct SettingsView: View {
         }
         .onAppear {
             launchAtLogin = getLaunchAtLoginStatus()
-            // 初始化文本框
             bUpper = brentUpperThreshold    > 0 ? String(format: "%.2f", brentUpperThreshold)    : ""
             bLower = brentLowerThreshold    > 0 ? String(format: "%.2f", brentLowerThreshold)    : ""
             wUpper = wtiUpperThreshold      > 0 ? String(format: "%.2f", wtiUpperThreshold)      : ""
             wLower = wtiLowerThreshold      > 0 ? String(format: "%.2f", wtiLowerThreshold)      : ""
             gUpper = gasolineUpperThreshold > 0 ? String(format: "%.2f", gasolineUpperThreshold) : ""
             gLower = gasolineLowerThreshold > 0 ? String(format: "%.2f", gasolineLowerThreshold) : ""
+            apiKeyField = KeychainHelper.apiKey() ?? ""
             Task { await notifications.refreshStatus() }
         }
     }

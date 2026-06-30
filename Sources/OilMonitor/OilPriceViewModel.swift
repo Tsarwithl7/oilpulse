@@ -35,6 +35,14 @@ final class OilPriceViewModel: ObservableObject {
     private var lastNormalRefreshAt: Date?
     private let normalCooldown: TimeInterval = 10
 
+    // MARK: - Strategy
+
+    @Published var strategyPlan: StrategyPlan?
+    @Published var isGeneratingStrategy = false
+    @Published var strategyError: String?
+
+    private let engine = StrategyEngine()
+
     // MARK: - Alert
 
     private let evaluator = PriceAlertEvaluator()
@@ -146,6 +154,7 @@ final class OilPriceViewModel: ObservableObject {
     // MARK: - Init
 
     init() {
+        loadCachedStrategy()
         Task {
             await loadFromCache()
             await performFetch()
@@ -328,6 +337,54 @@ final class OilPriceViewModel: ObservableObject {
 
     func updateTimerInterval() { scheduleTimer() }
 
+    // MARK: - Strategy Generation
+
+    func generateStrategy() {
+        guard !isGeneratingStrategy else { return }
+        isGeneratingStrategy = true
+        strategyError = nil
+        Task {
+            defer { isGeneratingStrategy = false }
+            // Load oneMonth daily data regardless of chart's selected range
+            let b = await database.loadPriceHistory(for: OilSymbol.brent.rawValue, range: .oneMonth)
+            let w = await database.loadPriceHistory(for: OilSymbol.wti.rawValue, range: .oneMonth)
+            let g = await database.loadPriceHistory(for: OilSymbol.gasoline.rawValue, range: .oneMonth)
+
+            let ud = UserDefaults.standard
+            let tank  = ud.double(forKey: "vehicleTankGallons").nonZero ?? 15
+            let miles = ud.double(forKey: "vehicleWeeklyMiles").nonZero ?? 300
+            let mpg   = ud.double(forKey: "vehicleMPG").nonZero ?? 30
+
+            let signals = engine.computeSignals(
+                brent: b, wti: w, rbob: g,
+                tankGallons: tank, weeklyMiles: miles, mpg: mpg
+            )
+            guard signals.dataPointCount >= 5 else {
+                strategyError = "历史数据不足（仅 \(signals.dataPointCount) 天），请稍后再试"
+                return
+            }
+            do {
+                let plan = try await LLMService.shared.generatePlan(from: signals)
+                strategyPlan = plan
+                persistStrategy(plan)
+            } catch {
+                strategyError = error.localizedDescription
+            }
+        }
+    }
+
+    private func persistStrategy(_ plan: StrategyPlan) {
+        if let data = try? JSONEncoder().encode(plan) {
+            UserDefaults.standard.set(data, forKey: "cachedStrategyPlan")
+        }
+    }
+
+    private func loadCachedStrategy() {
+        guard let data = UserDefaults.standard.data(forKey: "cachedStrategyPlan"),
+              let plan = try? JSONDecoder().decode(StrategyPlan.self, from: data) else { return }
+        strategyPlan = plan
+    }
+
     // MARK: - Computed
 
     var currentHistory: [PricePoint] {
@@ -363,4 +420,8 @@ final class OilPriceViewModel: ObservableObject {
         fmt.dateFormat = "M/d HH:mm"
         return "行情 " + fmt.string(from: t)
     }
+}
+
+private extension Double {
+    var nonZero: Double? { self == 0 ? nil : self }
 }
