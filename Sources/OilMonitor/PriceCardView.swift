@@ -24,7 +24,7 @@ struct PriceCardView: View {
                 .foregroundStyle(.primary)
                 .monospacedDigit()
 
-            Text("USD / barrel")
+            Text(OilSymbol(rawValue: price.symbol)?.unit ?? "USD / barrel")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
 
@@ -44,6 +44,7 @@ struct PriceCardView: View {
 
 struct EmptyPriceCardView: View {
     let name: String
+    var unit: String = "USD / barrel"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -57,7 +58,7 @@ struct EmptyPriceCardView: View {
                 .fontWeight(.bold)
                 .foregroundStyle(.secondary)
 
-            Text("USD / barrel")
+            Text(unit)
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
 

@@ -8,8 +8,10 @@ final class OilPriceViewModel: ObservableObject {
 
     @Published var brentPrice: OilPrice?
     @Published var wtiPrice: OilPrice?
+    @Published var gasolinePrice: OilPrice?
     @Published var brentHistory: [PricePoint] = []
     @Published var wtiHistory: [PricePoint] = []
+    @Published var gasolineHistory: [PricePoint] = []
     @Published var isRefreshing = false
     @Published var isForceRefreshing = false
     @Published var dataStatus: DataStatus = .loading
@@ -39,6 +41,7 @@ final class OilPriceViewModel: ObservableObject {
     private let notifications = NotificationService.shared
     private var previousBrentPrice: Double?
     private var previousWtiPrice: Double?
+    private var previousGasolinePrice: Double?
 
     private var brentAlertCfg: (upperEnabled: Bool, upper: Double, lowerEnabled: Bool, lower: Double) {
         let ud = UserDefaults.standard
@@ -56,11 +59,20 @@ final class OilPriceViewModel: ObservableObject {
                 ud.double(forKey: "wtiLowerAlertThreshold"))
     }
 
+    private var gasolineAlertCfg: (upperEnabled: Bool, upper: Double, lowerEnabled: Bool, lower: Double) {
+        let ud = UserDefaults.standard
+        return (ud.bool(forKey: "gasolineUpperAlertEnabled"),
+                ud.double(forKey: "gasolineUpperAlertThreshold"),
+                ud.bool(forKey: "gasolineLowerAlertEnabled"),
+                ud.double(forKey: "gasolineLowerAlertThreshold"))
+    }
+
     var enabledAlertCount: Int {
         let ud = UserDefaults.standard
         return [
-            "brentUpperAlertEnabled", "brentLowerAlertEnabled",
-            "wtiUpperAlertEnabled",   "wtiLowerAlertEnabled"
+            "brentUpperAlertEnabled",    "brentLowerAlertEnabled",
+            "wtiUpperAlertEnabled",      "wtiLowerAlertEnabled",
+            "gasolineUpperAlertEnabled", "gasolineLowerAlertEnabled"
         ].filter { ud.bool(forKey: $0) }.count
     }
 
@@ -76,13 +88,19 @@ final class OilPriceViewModel: ObservableObject {
             let c = wtiAlertCfg
             evaluator.resetArm(symbol: .wti, currentPrice: price,
                                upperThreshold: c.upper, lowerThreshold: c.lower)
+        case .gasoline:
+            guard let price = gasolinePrice?.price else { return }
+            let c = gasolineAlertCfg
+            evaluator.resetArm(symbol: .gasoline, currentPrice: price,
+                               upperThreshold: c.upper, lowerThreshold: c.lower)
         }
     }
 
-    private func evaluateAlerts(brent: OilPrice, wti: OilPrice) {
+    private func evaluateAlerts(brent: OilPrice, wti: OilPrice, gasoline: OilPrice) {
         var firings: [AlertFiring] = []
         let bc = brentAlertCfg
         let wc = wtiAlertCfg
+        let gc = gasolineAlertCfg
 
         if let prev = previousBrentPrice {
             firings += evaluator.evaluate(
@@ -103,6 +121,16 @@ final class OilPriceViewModel: ObservableObject {
                 marketTime: wti.marketTime)
         }
         previousWtiPrice = wti.price
+
+        if let prev = previousGasolinePrice {
+            firings += evaluator.evaluate(
+                symbol: .gasoline,
+                previousPrice: prev, currentPrice: gasoline.price,
+                upperEnabled: gc.upperEnabled, upperThreshold: gc.upper,
+                lowerEnabled: gc.lowerEnabled, lowerThreshold: gc.lower,
+                marketTime: gasoline.marketTime)
+        }
+        previousGasolinePrice = gasoline.price
 
         // 请求权限（首次有提醒启用时），然后发送通知
         if !firings.isEmpty {
@@ -130,10 +158,11 @@ final class OilPriceViewModel: ObservableObject {
     private func loadFromCache() async {
         let b = await database.loadLatestPrice(for: OilSymbol.brent.rawValue)
         let w = await database.loadLatestPrice(for: OilSymbol.wti.rawValue)
+        let g = await database.loadLatestPrice(for: OilSymbol.gasoline.rawValue)
         brentPrice = b
         wtiPrice = w
+        gasolinePrice = g
 
-        // 用缓存价格建立提醒基线，不触发通知
         if let b = b {
             let c = brentAlertCfg
             evaluator.setBaseline(symbol: .brent, price: b.price,
@@ -146,16 +175,24 @@ final class OilPriceViewModel: ObservableObject {
                                   upperThreshold: c.upper, lowerThreshold: c.lower)
             previousWtiPrice = w.price
         }
+        if let g = g {
+            let c = gasolineAlertCfg
+            evaluator.setBaseline(symbol: .gasoline, price: g.price,
+                                  upperThreshold: c.upper, lowerThreshold: c.lower)
+            previousGasolinePrice = g.price
+        }
 
-        dataStatus = (b != nil || w != nil) ? .cached : .noData
+        dataStatus = (b != nil || w != nil || g != nil) ? .cached : .noData
         await refreshHistoryFromCache()
     }
 
     private func refreshHistoryFromCache() async {
         let bh = await database.loadPriceHistory(for: OilSymbol.brent.rawValue, range: selectedRange)
         let wh = await database.loadPriceHistory(for: OilSymbol.wti.rawValue, range: selectedRange)
+        let gh = await database.loadPriceHistory(for: OilSymbol.gasoline.rawValue, range: selectedRange)
         brentHistory = bh
         wtiHistory = wh
+        gasolineHistory = gh
     }
 
     // MARK: - Panel Opened
@@ -182,13 +219,16 @@ final class OilPriceViewModel: ObservableObject {
         do {
             async let bFetch = service.fetchCurrentPrice(for: .brent)
             async let wFetch = service.fetchCurrentPrice(for: .wti)
-            let (b, w) = try await (bFetch, wFetch)
+            async let gFetch = service.fetchCurrentPrice(for: .gasoline)
+            let (b, w, g) = try await (bFetch, wFetch, gFetch)
 
-            evaluateAlerts(brent: b, wti: w)
+            evaluateAlerts(brent: b, wti: w, gasoline: g)
             brentPrice = b
             wtiPrice = w
+            gasolinePrice = g
             await database.saveLatestPrice(b)
             await database.saveLatestPrice(w)
+            await database.saveLatestPrice(g)
 
             await fetchAndSaveHistory()
 
@@ -197,7 +237,7 @@ final class OilPriceViewModel: ObservableObject {
             dataStatus = .normal
         } catch {
             errorMessage = error.localizedDescription
-            dataStatus = (brentPrice != nil || wtiPrice != nil) ? .cached : .offline
+            dataStatus = (brentPrice != nil || wtiPrice != nil || gasolinePrice != nil) ? .cached : .offline
         }
 
         isRefreshing = false
@@ -220,13 +260,16 @@ final class OilPriceViewModel: ObservableObject {
         do {
             async let bFetch = service.fetchCurrentPrice(for: .brent)
             async let wFetch = service.fetchCurrentPrice(for: .wti)
-            let (b, w) = try await (bFetch, wFetch)
+            async let gFetch = service.fetchCurrentPrice(for: .gasoline)
+            let (b, w, g) = try await (bFetch, wFetch, gFetch)
 
-            evaluateAlerts(brent: b, wti: w)
+            evaluateAlerts(brent: b, wti: w, gasoline: g)
             brentPrice = b
             wtiPrice = w
+            gasolinePrice = g
             await database.saveLatestPrice(b)
             await database.saveLatestPrice(w)
+            await database.saveLatestPrice(g)
 
             await fetchAndSaveHistory()
 
@@ -235,7 +278,7 @@ final class OilPriceViewModel: ObservableObject {
             dataStatus = .normal
         } catch {
             errorMessage = error.localizedDescription
-            dataStatus = (brentPrice != nil || wtiPrice != nil) ? .cached : .offline
+            dataStatus = (brentPrice != nil || wtiPrice != nil || gasolinePrice != nil) ? .cached : .offline
         }
 
         isRefreshing = false
@@ -249,11 +292,14 @@ final class OilPriceViewModel: ObservableObject {
         do {
             async let bh = service.fetchHistory(for: .brent, range: selectedRange)
             async let wh = service.fetchHistory(for: .wti, range: selectedRange)
-            let (b, w) = try await (bh, wh)
+            async let gh = service.fetchHistory(for: .gasoline, range: selectedRange)
+            let (b, w, g) = try await (bh, wh, gh)
             brentHistory = b
             wtiHistory = w
+            gasolineHistory = g
             await database.savePriceHistory(b)
             await database.savePriceHistory(w)
+            await database.savePriceHistory(g)
         } catch {
             await refreshHistoryFromCache()
         }
@@ -285,11 +331,18 @@ final class OilPriceViewModel: ObservableObject {
     // MARK: - Computed
 
     var currentHistory: [PricePoint] {
-        selectedSymbol == .brent ? brentHistory : wtiHistory
+        switch selectedSymbol {
+        case .brent:    return brentHistory
+        case .wti:      return wtiHistory
+        case .gasoline: return gasolineHistory
+        }
     }
 
     var menuBarText: String? {
         guard showPriceInMenuBar, let b = brentPrice, let w = wtiPrice else { return nil }
+        if let g = gasolinePrice {
+            return String(format: "B %.2f · W %.2f · G %.2f", b.price, w.price, g.price)
+        }
         return String(format: "B %.2f · W %.2f", b.price, w.price)
     }
 

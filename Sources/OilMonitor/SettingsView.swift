@@ -21,11 +21,19 @@ struct SettingsView: View {
     @AppStorage("wtiLowerAlertEnabled")   private var wtiLowerEnabled   = false
     @AppStorage("wtiLowerAlertThreshold") private var wtiLowerThreshold = 0.0
 
+    // RBOB 提醒
+    @AppStorage("gasolineUpperAlertEnabled")   private var gasolineUpperEnabled   = false
+    @AppStorage("gasolineUpperAlertThreshold") private var gasolineUpperThreshold = 0.0
+    @AppStorage("gasolineLowerAlertEnabled")   private var gasolineLowerEnabled   = false
+    @AppStorage("gasolineLowerAlertThreshold") private var gasolineLowerThreshold = 0.0
+
     // 文本框暂存（String ↔ Double 转换）
     @State private var bUpper = ""
     @State private var bLower = ""
     @State private var wUpper = ""
     @State private var wLower = ""
+    @State private var gUpper = ""
+    @State private var gLower = ""
 
     var body: some View {
         Form {
@@ -78,6 +86,20 @@ struct SettingsView: View {
                     }
                 )
 
+                AlertSymbolSection(
+                    symbolName: "RBOB 汽油",
+                    currentPrice: vm.gasolinePrice?.price,
+                    upperEnabled: $gasolineUpperEnabled,
+                    upperText:    $gUpper,
+                    lowerEnabled: $gasolineLowerEnabled,
+                    lowerText:    $gLower,
+                    onCommit: {
+                        gasolineUpperThreshold = Double(gUpper) ?? gasolineUpperThreshold
+                        gasolineLowerThreshold = Double(gLower) ?? gasolineLowerThreshold
+                        vm.resetAlertBaseline(for: .gasoline)
+                    }
+                )
+
                 HStack {
                     Spacer()
                     Button("发送测试通知") {
@@ -114,7 +136,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 380, height: 560)
+        .frame(width: 380, height: 640)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {
                 Button("完成") { dismiss() }
@@ -123,10 +145,12 @@ struct SettingsView: View {
         .onAppear {
             launchAtLogin = getLaunchAtLoginStatus()
             // 初始化文本框
-            bUpper = brentUpperThreshold > 0 ? String(format: "%.2f", brentUpperThreshold) : ""
-            bLower = brentLowerThreshold > 0 ? String(format: "%.2f", brentLowerThreshold) : ""
-            wUpper = wtiUpperThreshold   > 0 ? String(format: "%.2f", wtiUpperThreshold)   : ""
-            wLower = wtiLowerThreshold   > 0 ? String(format: "%.2f", wtiLowerThreshold)   : ""
+            bUpper = brentUpperThreshold    > 0 ? String(format: "%.2f", brentUpperThreshold)    : ""
+            bLower = brentLowerThreshold    > 0 ? String(format: "%.2f", brentLowerThreshold)    : ""
+            wUpper = wtiUpperThreshold      > 0 ? String(format: "%.2f", wtiUpperThreshold)      : ""
+            wLower = wtiLowerThreshold      > 0 ? String(format: "%.2f", wtiLowerThreshold)      : ""
+            gUpper = gasolineUpperThreshold > 0 ? String(format: "%.2f", gasolineUpperThreshold) : ""
+            gLower = gasolineLowerThreshold > 0 ? String(format: "%.2f", gasolineLowerThreshold) : ""
             Task { await notifications.refreshStatus() }
         }
     }

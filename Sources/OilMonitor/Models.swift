@@ -23,13 +23,22 @@ struct PricePoint: Identifiable {
 }
 
 enum OilSymbol: String, CaseIterable {
-    case brent = "BZ=F"
-    case wti = "CL=F"
+    case brent    = "BZ=F"
+    case wti      = "CL=F"
+    case gasoline = "RB=F"
 
     var displayName: String {
         switch self {
-        case .brent: return "Brent"
-        case .wti: return "WTI"
+        case .brent:    return "Brent"
+        case .wti:      return "WTI"
+        case .gasoline: return "RBOB"
+        }
+    }
+
+    var unit: String {
+        switch self {
+        case .brent, .wti: return "USD / barrel"
+        case .gasoline:    return "USD / gallon"
         }
     }
 }

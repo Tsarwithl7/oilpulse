@@ -42,7 +42,7 @@ struct MenuBarContentView: View {
                 if let b = vm.brentPrice {
                     PriceCardView(price: b)
                 } else {
-                    EmptyPriceCardView(name: "Brent")
+                    EmptyPriceCardView(name: "Brent", unit: OilSymbol.brent.unit)
                 }
 
                 Divider()
@@ -50,7 +50,15 @@ struct MenuBarContentView: View {
                 if let w = vm.wtiPrice {
                     PriceCardView(price: w)
                 } else {
-                    EmptyPriceCardView(name: "WTI")
+                    EmptyPriceCardView(name: "WTI", unit: OilSymbol.wti.unit)
+                }
+
+                Divider()
+
+                if let g = vm.gasolinePrice {
+                    PriceCardView(price: g)
+                } else {
+                    EmptyPriceCardView(name: "RBOB", unit: OilSymbol.gasoline.unit)
                 }
             }
 
@@ -114,7 +122,7 @@ struct MenuBarContentView: View {
             // ── Status bar ───────────────────────────────────────────────
             StatusBarView(vm: vm, showSettings: $showSettings)
         }
-        .frame(width: 390)
+        .frame(width: 480)
         .background(Color(NSColor.windowBackgroundColor))
         .sheet(isPresented: $showSettings) {
             SettingsView()
